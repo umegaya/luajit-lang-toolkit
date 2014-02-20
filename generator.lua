@@ -90,7 +90,7 @@ function ExpressionRule:Identifier(node, dest, want)
          dest = dest or self.ctx:nextreg()
          self.ctx:op_uget(dest, node.name)
       else
-         local var = self.ctx.varinfo[node.name]
+         local var = self.ctx:lookup(node.name)
          dest = dest or var.idx
          if dest ~= var.idx then
              self.ctx:op_move(dest, var.idx)
@@ -742,8 +742,9 @@ function StatementRule:BreakStatement()
       -- The following call will generate either a JMP instruction or an UCLO instruction
       -- with jump as appropriate.
       self.ctx:close_block_uvals(self.exit_reg, self.exit)
+      self.ctx.scope.uvclosed = true
       -- The following is set to -1 to indicate that the current lexical block was closed.
-      self.savereg[#self.savereg] = -1
+      -- self.savereg[#self.savereg] = -1
    else
       error("no loop to break")
    end
@@ -838,8 +839,9 @@ function StatementRule:ReturnStatement(node)
    if self.ctx:is_root_scope() then
       self.ctx.explret = true
    end
+   self.ctx.scope.uvclosed = true
    -- The following is set to -1 to indicate that the current lexical block was closed.
-   self.savereg[#self.savereg] = -1
+   -- self.savereg[#self.savereg] = -1
 end
 
 function StatementRule:Chunk(tree, name)
@@ -870,22 +872,22 @@ local function generate(tree, name)
    self.main = bc.Proto.new(bc.Proto.VARARG)
    self.dump = bc.Dump.new(self.main, name)
    self.ctx = self.main
-   self.savereg = { }
+   -- self.savereg = { }
 
    function self:block_enter()
-      self.savereg[#self.savereg + 1] = self.ctx.freereg
+      -- self.savereg[#self.savereg + 1] = self.ctx.freereg
+      print('>>> ENTER', self.ctx.scope.basereg, #self.ctx.scope.actvars)
       self.ctx:enter()
    end
 
    function self:block_leave(exit)
-      local free = self.savereg[#self.savereg]
-      self.savereg[#self.savereg] = nil
+      -- local free = self.savereg[#self.savereg]
+      -- self.savereg[#self.savereg] = nil
       -- If "free" is negative the block was already closed by a "break" or "return"
       -- instruction. In this case the close_block_uvals is not needed.
-      if free >= 0 then
-         self.ctx:close_block_uvals(free, exit)
-      end
+      self.ctx:close_block_uvals(self.ctx.scope.basereg, exit)
       self.ctx:leave()
+      print('>>> LEAVE')
    end
 
    function self:loop_enter(exit, exit_reg)
