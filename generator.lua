@@ -274,10 +274,7 @@ function ExpressionRule:FunctionExpression(node, dest)
       end
    end
    self:emit(node.body)
-   if not self.ctx.explret then
-      self.ctx:op_ret0()
-   end
-   self.ctx:close()
+   self:close_proto()
 
    self.ctx = self.ctx.outer
    self.ctx.freereg = free
@@ -322,12 +319,14 @@ local function emit_call_expression(self, node, dest, want, tail, use_self)
    self.ctx.freereg = free
    if mres then
       if use_tail then
+         self.ctx:close_uvals()
          self.ctx:op_callmt(base, narg - 1)
       else
          self.ctx:op_callm(base, want, narg - 1)
       end
    else
       if use_tail then
+         self.ctx:close_uvals()
          self.ctx:op_callt(base, narg)
       else
          self.ctx:op_call(base, want, narg)
@@ -703,10 +702,7 @@ function StatementRule:FunctionDeclaration(node)
       end
    end
    self:emit(node.body)
-   if not self.ctx.explret then
-      self.ctx:op_ret0()
-   end
-   self.ctx:close()
+   self:close_proto()
 
    self.ctx = self.ctx.outer
    self.ctx.freereg = free
@@ -743,8 +739,6 @@ function StatementRule:BreakStatement()
       -- with jump as appropriate.
       self.ctx:close_block_uvals(self.exit_reg, self.exit)
       self.ctx.scope.uvclosed = true
-      -- The following is set to -1 to indicate that the current lexical block was closed.
-      -- self.savereg[#self.savereg] = -1
    else
       error("no loop to break")
    end
@@ -811,10 +805,12 @@ end
 function StatementRule:ReturnStatement(node)
    local narg = #node.arguments
    if narg == 0 then
+      self.ctx:close_uvals()
       self.ctx:op_ret0()
    elseif narg == 1 then
       local dest, _, tail = self:expr_emit(node.arguments[1], nil, 1, true)
       if not tail then
+         self.ctx:close_uvals()
          self.ctx:op_ret1(dest)
       end
    else
@@ -829,6 +825,7 @@ function StatementRule:ReturnStatement(node)
       local _, mret, tail = self:expr_emit(lastarg, current, MULTIRES)
       self.ctx.freereg = base
       if not tail then
+         self.ctx:close_uvals()
          if mret then
             self.ctx:op_retm(base, narg - 1)
          else
@@ -840,18 +837,13 @@ function StatementRule:ReturnStatement(node)
       self.ctx.explret = true
    end
    self.ctx.scope.uvclosed = true
-   -- The following is set to -1 to indicate that the current lexical block was closed.
-   -- self.savereg[#self.savereg] = -1
 end
 
 function StatementRule:Chunk(tree, name)
    for i=1, #tree.body do
       self:emit(tree.body[i])
    end
-   if not self.ctx.explret then
-      self.ctx:op_ret0()
-   end
-   self.ctx:close()
+   self:close_proto()
 end
 
 local function dispatch(self, lookup, node, ...)
@@ -872,22 +864,14 @@ local function generate(tree, name)
    self.main = bc.Proto.new(bc.Proto.VARARG)
    self.dump = bc.Dump.new(self.main, name)
    self.ctx = self.main
-   -- self.savereg = { }
 
    function self:block_enter()
-      -- self.savereg[#self.savereg + 1] = self.ctx.freereg
-      print('>>> ENTER', self.ctx.scope.basereg, #self.ctx.scope.actvars)
       self.ctx:enter()
    end
 
    function self:block_leave(exit)
-      -- local free = self.savereg[#self.savereg]
-      -- self.savereg[#self.savereg] = nil
-      -- If "free" is negative the block was already closed by a "break" or "return"
-      -- instruction. In this case the close_block_uvals is not needed.
       self.ctx:close_block_uvals(self.ctx.scope.basereg, exit)
       self.ctx:leave()
-      print('>>> LEAVE')
    end
 
    function self:loop_enter(exit, exit_reg)
@@ -1009,6 +993,14 @@ local function generate(tree, name)
       if rule then
          return rule(self, node)
       end
+   end
+
+   function self:close_proto()
+      if not self.ctx.explret then
+         self.ctx:close_uvals()
+         self.ctx:op_ret0()
+      end
+      self.ctx:close()
    end
 
    self:emit(tree)

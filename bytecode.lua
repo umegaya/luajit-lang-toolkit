@@ -364,17 +364,11 @@ function Proto.__index:enter()
    local outer = self.scope
    self.scope = {
       actvars = { };
-      basereg = self.freereg; -- self:getbase();
+      basereg = self.freereg;
       uvclosed = false;
       outer   = outer;
-      -- upval   = false;
    }
    return self.scope
-   -- local outer = self.actvars
-   -- self.actvars = setmetatable({ }, {
-   --    freereg = self.freereg;
-   --    __index = outer;
-   -- })
 end
 function Proto.__index:is_root_scope()
    return (self.scope.outer == nil)
@@ -385,9 +379,6 @@ function Proto.__index:leave()
    end
    self.scope   = self.scope.outer
    self.freereg = self:getbase()
-   -- local scope = assert(getmetatable(self.actvars), "cannot leave main scope")
-   -- self.freereg = scope.freereg
-   -- self.actvars = scope.__index
 end
 function Proto.__index:close()
    self.numlines = self.firstline and self.lastline - self.firstline or 0
@@ -565,20 +556,6 @@ function Proto.__index:newvar(name, dest)
    self.varinfo[#self.varinfo + 1] = vinfo
 
    return vinfo
-   -- if not reg then reg = self:nextreg() end
-   -- if not ofs then ofs = #self.code end
-   -- local var = {
-   --    idx      = reg;
-   --    startpc  = ofs;
-   --    endpc    = ofs;
-   --    name     = name;
-   -- }
-   -- self.actvars[name] = var
-
-   -- self.varinfo[name] = var
-   -- var.vidx = #self.varinfo
-   -- self.varinfo[#self.varinfo + 1] = var
-   -- return var
 end
 local function scope_var_lookup(scope, name)
    while scope do
@@ -597,23 +574,7 @@ function Proto.__index:lookup(name)
    end
    -- Global variable.
    return nil, false
-   -- if self.actvars[name] then
-   --    return self.actvars[name], false
-   -- elseif self.outer then
-   --    local v = self.outer:lookup(name)
-   --    if v then return v, true end
-   -- end
-   -- return nil, false
 end
--- function Proto.__index:getvar(name)
---    local info = self.actvars[name]
---    if not info then return nil end
---    if not info.startpc then
---       info.startpc = #self.code
---    end
---    info.endpc = #self.code
---    return info.idx
--- end
 function Proto.__index:param(...)
    local var = self:newvar(...)
    var.startpc = 0
@@ -842,9 +803,8 @@ end
 function Proto.__index:op_fnew(dest, pidx)
    return self:emit(BC.FNEW, dest, pidx)
 end
--- IMPORTANT: op_uclo doit disparaitre!
-function Proto.__index:op_uclo(jump)
-   return self:emit(BC.UCLO, self.scope.basereg, jump or 0)
+function Proto.__index:op_uclo(base, jump)
+   return self:emit(BC.UCLO, base, jump)
 end
 function Proto.__index:op_uset(name, vtag, val)
    local ins = BC['USET' .. vtag]
@@ -879,23 +839,19 @@ function Proto.__index:close_block_uvals(reg, exit)
 end
 function Proto.__index:close_uvals()
    if self.need_close then
-      self:emit(BC.UCLO, self.scope.basereg, 0)
+      self:emit(BC.UCLO, 0, 0)
    end
 end
 function Proto.__index:op_ret(base, rnum)
-   self:close_uvals()
    return self:emit(BC.RET, base, rnum + 1)
 end
 function Proto.__index:op_ret0()
-   self:close_uvals()
    return self:emit(BC.RET0, 0, 1)
 end
 function Proto.__index:op_ret1(base)
-   self:close_uvals()
    return self:emit(BC.RET1, base, 2)
 end
 function Proto.__index:op_retm(base, rnum)
-   self:close_uvals()
    return self:emit(BC.RETM, base, rnum)
 end
 function Proto.__index:op_varg(base, want)
@@ -905,14 +861,12 @@ function Proto.__index:op_call(base, want, narg)
    return self:emit(BC.CALL, base, want + 1, narg + 1)
 end
 function Proto.__index:op_callt(base, narg)
-   self:close_uvals()
    return self:emit(BC.CALLT, base, narg + 1)
 end
 function Proto.__index:op_callm(base, want, narg)
    return self:emit(BC.CALLM, base, want + 1, narg)
 end
 function Proto.__index:op_callmt(base, narg)
-   self:close_uvals()
    return self:emit(BC.CALLMT, base, narg)
 end
 function Proto.__index:op_fori(base, stop, step)
