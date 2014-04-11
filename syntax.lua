@@ -561,7 +561,37 @@ local function build(kind, props)
    return validate(meta, props)
 end
 
+local dump
+-- TODO : pretty print
+dump = function (node)
+   if type(node) ~= "table" then
+	return tostring(node)
+   end
+   local meta = syntax[node.kind]
+   local out = node.kind .. "{"
+   for name, spec in pairs(meta.properties) do
+      if spec.type == "node" then
+         out = (out..name.."="..dump(node[name])..",")
+      elseif spec.type == "list" then
+         out = (out..name.."={")
+         for i,n in ipairs(node[name]) do
+            out = (out..dump(n)..",")
+         end
+         out = (out.."},")
+      else
+         out = (out..name.."="..tostring(node[name])..",")
+      end
+   end
+   out = (out.."line="..tostring(node.line))
+   if node.firstline or node.lastline then
+      out = (out..",range='"..tostring(node.firstline).."/"..tostring(node.lastline).."'")
+   end
+   out = (out.."}")
+   return out
+end
+
 return {
    syntax = syntax,
    build  = build,
+   dump = dump,
 }

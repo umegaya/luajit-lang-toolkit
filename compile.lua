@@ -3,6 +3,7 @@ local parse = require('parser')
 local ast = require('lua-ast').New()
 local generator = require('generator')
 local reader = require('reader')
+local dump = require('syntax').dump
 
 local function lang_toolkit_error(msg)
    if string.sub(msg, 1, 9) == "LLT-ERROR" then
